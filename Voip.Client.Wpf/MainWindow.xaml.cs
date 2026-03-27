@@ -19,12 +19,15 @@ public partial class MainWindow : Window
     private readonly SignalClient signal = new();
     private readonly ObservableCollection<string> availableRooms = [];
     private readonly ObservableCollection<RoomUserStatus> connectedUsers = [];
+    private readonly ObservableCollection<string> logEntries = [];
     private readonly ClientSettings settings;
 
+    private LogWindow? logWindow;
     private bool pushToTalkActive;
     private bool micLatched;
     private bool lastReportedMicState;
     private bool isServerMuted;
+    private int voicedFrameHangover;
     private string currentRoom = string.Empty;
     private string currentUserName = string.Empty;
     private string currentPublicIp = string.Empty;
@@ -41,10 +44,16 @@ public partial class MainWindow : Window
         UsersList.ItemsSource = connectedUsers;
         SetAvailableRooms([settings.Room, "general"]);
         SelectRoom(settings.Room);
+        AddLog("Client started.");
 
         capture.OnAudioCaptured += data =>
         {
             if (!IsTransmitting() || !signal.IsConnected || string.IsNullOrWhiteSpace(currentRoom))
+            {
+                return;
+            }
+
+            if (!ShouldSendAudioFrame(data))
             {
                 return;
             }
@@ -61,6 +70,7 @@ public partial class MainWindow : Window
 
         signal.OnConnected += () =>
         {
+            AddLog($"Socket connected to {ServerBox.Text.Trim()}");
             signal.Send(new SignalMessage
             {
                 Type = "join",
@@ -73,6 +83,7 @@ public partial class MainWindow : Window
 
         signal.OnConnectionError += message =>
         {
+            AddLog($"Connection error: {message}");
             Dispatcher.Invoke(() =>
             {
                 ResetConnectionState();
@@ -80,20 +91,26 @@ public partial class MainWindow : Window
             });
         };
 
-        signal.OnDisconnected += () =>
+        signal.OnDisconnected += details =>
         {
+            AddLog($"Socket disconnected. {details}");
             Dispatcher.Invoke(() =>
             {
                 ResetConnectionState();
                 if (string.IsNullOrWhiteSpace(Status.Text) || Status.Text == "Connecting...")
                 {
-                    Status.Text = "Disconnected from server.";
+                    Status.Text = $"Disconnected from server. {details}";
                 }
             });
         };
 
         signal.OnMessage += message =>
         {
+            if (message.Type != "audio")
+            {
+                AddLog($"Received message '{message.Type}' for room '{message.Room}'.");
+            }
+
             if (message.Type == "connected")
             {
                 Dispatcher.Invoke(() =>
@@ -219,6 +236,7 @@ public partial class MainWindow : Window
         currentUserName = UserNameBox.Text.Trim();
         currentRoom = GetSelectedRoom();
         var serverUrl = ServerBox.Text.Trim();
+        AddLog($"Connect requested. Server={serverUrl}, User={currentUserName}, Room={currentRoom}");
 
         if (string.IsNullOrWhiteSpace(currentUserName))
         {
@@ -259,18 +277,41 @@ public partial class MainWindow : Window
             capture.Start();
             signal.Connect(serverUrl);
             Status.Text = "Connecting...";
+            AddLog("Audio capture started and websocket connect initiated.");
         }
         catch (Exception ex)
         {
             capture.Stop();
             Status.Text = BuildConnectionErrorMessage(ex.Message);
+            AddLog($"Connect failed before socket open: {ex.Message}");
         }
     }
 
     private void Disconnect_Click(object sender, RoutedEventArgs e)
     {
         Status.Text = "Disconnecting...";
+        AddLog("Manual disconnect requested.");
         signal.Disconnect();
+    }
+
+    private void LogsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (logWindow is null || !logWindow.IsLoaded)
+        {
+            logWindow = new LogWindow(logEntries);
+            logWindow.Owner = this;
+            logWindow.Closed += (_, _) => logWindow = null;
+            logWindow.Show();
+            AddLog("Log window opened.");
+            return;
+        }
+
+        if (logWindow.WindowState == WindowState.Minimized)
+        {
+            logWindow.WindowState = WindowState.Normal;
+        }
+
+        logWindow.Activate();
     }
 
     private void ChangeRoom_Click(object sender, RoutedEventArgs e)
@@ -306,6 +347,7 @@ public partial class MainWindow : Window
             Data = currentUserName
         });
         Status.Text = $"Changing room to '{selectedRoom}'...";
+        AddLog($"Requested room change from '{currentRoom}' to '{selectedRoom}'.");
     }
 
     private void StartTalk(object sender, MouseButtonEventArgs e)
@@ -391,6 +433,7 @@ public partial class MainWindow : Window
         pushToTalkActive = false;
         micLatched = false;
         lastReportedMicState = false;
+        voicedFrameHangover = 0;
         isServerMuted = false;
         connectedUsers.Clear();
         capture.Stop();
@@ -424,6 +467,53 @@ public partial class MainWindow : Window
         return $"Unable to reach the server. Check the public IP/domain, port 8181 forwarding, and Windows Firewall. Details: {details}";
     }
 
+    private void AddLog(string message)
+    {
+        var line = $"[{DateTime.Now:HH:mm:ss}] {message}";
+
+        Dispatcher.Invoke(() =>
+        {
+            logEntries.Add(line);
+            while (logEntries.Count > 500)
+            {
+                logEntries.RemoveAt(0);
+            }
+        });
+    }
+
+    private bool ShouldSendAudioFrame(byte[] data)
+    {
+        var sampleCount = data.Length / 2;
+        if (sampleCount == 0)
+        {
+            return false;
+        }
+
+        long totalLevel = 0;
+        for (var index = 0; index < data.Length; index += 2)
+        {
+            var sample = BitConverter.ToInt16(data, index);
+            totalLevel += Math.Abs(sample);
+        }
+
+        var averageLevel = totalLevel / sampleCount;
+        var isVoiceDetected = averageLevel >= 600;
+
+        if (isVoiceDetected)
+        {
+            voicedFrameHangover = 8;
+            return true;
+        }
+
+        if (voicedFrameHangover <= 0)
+        {
+            return false;
+        }
+
+        voicedFrameHangover--;
+        return true;
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         capture.Dispose();
@@ -435,6 +525,7 @@ public partial class MainWindow : Window
     protected override async void OnContentRendered(EventArgs e)
     {
         base.OnContentRendered(e);
+        AddLog("Main window rendered. Attempting initial room refresh.");
         await RefreshRoomsAsync(ServerBox.Text.Trim(), silentOnFailure: true);
     }
 
@@ -485,6 +576,7 @@ public partial class MainWindow : Window
     {
         try
         {
+            AddLog($"Refreshing room list from {serverUrl}.");
             var rooms = await FetchRoomsAsync(serverUrl);
             if (rooms is null || rooms.Count == 0)
             {
@@ -494,6 +586,7 @@ public partial class MainWindow : Window
                 {
                     Status.Text = "No active rooms were reported. Using 'general'.";
                 }
+                AddLog("Room refresh returned no rooms. Falling back to 'general'.");
                 return;
             }
 
@@ -509,6 +602,7 @@ public partial class MainWindow : Window
             {
                 Status.Text = $"Loaded {rooms.Count} room(s) from the server.";
             }
+            AddLog($"Room refresh succeeded. Rooms={string.Join(", ", rooms)}");
         }
         catch (Exception ex)
         {
@@ -518,6 +612,7 @@ public partial class MainWindow : Window
             {
                 Status.Text = BuildConnectionErrorMessage(ex.Message);
             }
+            AddLog($"Room refresh failed: {ex.Message}");
         }
     }
 

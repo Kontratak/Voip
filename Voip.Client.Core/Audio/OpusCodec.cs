@@ -5,13 +5,26 @@ namespace Voip.Client.Core.Audio;
 
 public sealed class OpusCodec
 {
+    public const int SampleRate = 48000;
+    public const int Channels = 1;
+    public const int FrameMilliseconds = 20;
+    public const int SamplesPerFrame = SampleRate / 1000 * FrameMilliseconds;
+
     private readonly OpusEncoder encoder;
     private readonly OpusDecoder decoder;
 
     public OpusCodec()
     {
-        encoder = new OpusEncoder(48000, 1, OpusApplication.OPUS_APPLICATION_VOIP);
-        decoder = new OpusDecoder(48000, 1);
+        encoder = new OpusEncoder(SampleRate, Channels, OpusApplication.OPUS_APPLICATION_VOIP)
+        {
+            Bitrate = 16000,
+            Complexity = 5,
+            SignalType = OpusSignal.OPUS_SIGNAL_VOICE,
+            UseInbandFEC = true,
+            PacketLossPercent = 10
+        };
+
+        decoder = new OpusDecoder(SampleRate, Channels);
     }
 
     public byte[] Encode(byte[] pcm)
@@ -29,7 +42,7 @@ public sealed class OpusCodec
 
     public byte[] Decode(byte[] data)
     {
-        var pcm = new short[1920];
+        var pcm = new short[SamplesPerFrame];
         var samples = decoder.Decode(data, pcm, pcm.Length, false);
 
         var buffer = new byte[samples * 2];

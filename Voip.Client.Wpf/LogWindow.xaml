@@ -1,0 +1,26 @@
+<Window x:Class="Voip.Client.Wpf.LogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Connection Logs"
+        Height="420"
+        Width="720"
+        MinHeight="280"
+        MinWidth="460">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Live client and connection logs"
+                   FontWeight="SemiBold" />
+
+        <ListBox x:Name="LogsList"
+                 Grid.Row="1"
+                 Margin="0,10,0,0"
+                 FontFamily="Consolas"
+                 FontSize="12"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+    </Grid>
+</Window>

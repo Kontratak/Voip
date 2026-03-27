@@ -18,6 +18,13 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <Button x:Name="LogsButton"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Padding="10,4"
+                Content="Logs"
+                Click="LogsButton_Click" />
+
         <TextBlock Text="Server" FontWeight="SemiBold" />
         <TextBox x:Name="ServerBox"
                  Grid.Row="1"

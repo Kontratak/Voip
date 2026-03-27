@@ -307,6 +307,16 @@ server.Start(socket =>
         return;
     }
 
+    socket.OnOpen = () =>
+    {
+        Console.WriteLine($"{Timestamp()} Socket opened from remote IP '{clientIpAddress}'.");
+    };
+
+    socket.OnError = exception =>
+    {
+        Console.WriteLine($"{Timestamp()} Socket error from remote IP '{clientIpAddress}': {exception.Message}");
+    };
+
     socket.OnMessage = payload =>
     {
         var signal = JsonSerializer.Deserialize<SignalMessage>(payload);
@@ -514,6 +524,7 @@ server.Start(socket =>
     {
         if (!roomManager.TryGetDisconnectInfo(socket, out var currentRoom, out var currentUserName, out var wasKicked, out _))
         {
+            Console.WriteLine($"{Timestamp()} Socket closed before room join. Remote IP: '{clientIpAddress}'.");
             roomManager.Leave(socket);
             return;
         }
