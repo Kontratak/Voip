@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+.appdata/
+.localappdata/
+.userprofile/
+NuGet/
+artifacts/
+*.user
+*.suo
+*.cache
+*.pdb
+*.log
