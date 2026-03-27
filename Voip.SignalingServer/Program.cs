@@ -5,7 +5,8 @@ using Voip.Shared;
 using Voip.SignalingServer;
 
 var roomManager = new RoomManager();
-var server = new WebSocketServer("ws://0.0.0.0:8181");
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8181";
+var server = new WebSocketServer($"ws://0.0.0.0:{port}");
 var bannedIps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 var bannedIpsSync = new Lock();
 
@@ -553,16 +554,16 @@ server.Start(socket =>
 });
 
 var publicIp = await TryGetPublicIpAsync();
-Console.WriteLine("Signaling server running on ws://0.0.0.0:8181");
+Console.WriteLine($"Signaling server running on ws://0.0.0.0:{port}");
 if (publicIp is null)
 {
     Console.WriteLine("Public IP: unavailable (internet lookup failed)");
-    Console.WriteLine("Remote clients should connect to ws://YOUR_PUBLIC_IP:8181");
+    Console.WriteLine($"Remote clients should connect to ws://YOUR_PUBLIC_IP:{port}");
 }
 else
 {
     Console.WriteLine($"Public IP: {publicIp}");
-    Console.WriteLine($"Remote clients should connect to ws://{publicIp}:8181");
+    Console.WriteLine($"Remote clients should connect to ws://{publicIp}:{port}");
 }
 Console.WriteLine("Commands: /rooms, /roomlists, /banned, /addroom <room>, /deleteroom <room>, /kick <room> <user>, /disconnect <room> <user>, /mute <room> <user>, /unmute <room> <user>, /banip <ip>, /unbanip <ip>, /help, exit");
 
