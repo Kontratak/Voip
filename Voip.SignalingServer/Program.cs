@@ -567,6 +567,12 @@ else
 }
 Console.WriteLine("Commands: /rooms, /roomlists, /banned, /addroom <room>, /deleteroom <room>, /kick <room> <user>, /disconnect <room> <user>, /mute <room> <user>, /unmute <room> <user>, /banip <ip>, /unbanip <ip>, /help, exit");
 
+if (Console.IsInputRedirected)
+{
+    await Task.Delay(Timeout.InfiniteTimeSpan);
+    return;
+}
+
 while (true)
 {
     var input = Console.ReadLine();
